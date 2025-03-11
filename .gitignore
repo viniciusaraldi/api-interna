@@ -1,0 +1,7 @@
+.env
+errors/automation/SolicitacaoSaqueBon/*
+errors/financeiro/*
+
+# Permitir que as pastas sejam enviadas sem arquivos
+!errors/automation/SolicitacaoSaqueBon/.gitkeep
+!errors/financeiro/.gitkeep
