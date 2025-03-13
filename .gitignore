@@ -1,4 +1,5 @@
 .env
+index.php
 errors/automation/SolicitacaoSaqueBon/*
 errors/financeiro/*
 
