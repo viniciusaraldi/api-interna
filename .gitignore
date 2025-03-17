@@ -2,7 +2,7 @@
 index.php
 errors/automation/SolicitacaoSaqueBon/*
 errors/financeiro/*
-automation/ativaComandoInativarEntidadeRamo21SemNotaSemPedido.bat
+public/
 
 # Permitir que as pastas sejam enviadas sem arquivos
 !errors/automation/SolicitacaoSaqueBon/.gitkeep
