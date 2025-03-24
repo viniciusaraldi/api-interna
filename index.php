@@ -1,6 +1,7 @@
 <?php
 
 header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Credentials: true");
 header("Access-Control-Allow-Methods: GET, POST, OPTIONS, DELETE, PUT");
 header("Access-Control-Allow-Headers: Content-Type, Authorization");
 header('Content-Type: application/json');
@@ -17,7 +18,8 @@ require_once './routes/router.php';
 $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $method = $_SERVER['REQUEST_METHOD'];
 $params = $_SERVER['QUERY_STRING'];
-$body = json_decode(file_get_contents('php://input'), true);
+$body = json_decode(file_get_contents('php://input'), true) ?? $_POST;
+$files = $_FILES;
 
 $arraySetor = explode("/", $uri);
 $setor = $arraySetor[3];
@@ -29,11 +31,11 @@ if (in_array("api",$foundApi)) {
     array_shift($foundApi);
     if (array_key_exists($foundApi[0], $routes)) {
         array_shift($foundApi);     
-        echo json_encode($routes[$setor](strtolower($method), $foundApi[0], $params, $body));
+        echo json_encode($routes[$setor](strtolower($method), $foundApi[0], $params, $body, $files));
     }
 } else {
     return [
-        "status" => 401,
+        "status" => 403,
         "data" => "Não há caminho para API, verifique!",
     ];
 }

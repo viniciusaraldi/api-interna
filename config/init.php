@@ -7,9 +7,9 @@ abstract class DB {
     private $password;
     private $port;
     protected $tkBAbstract;
-
     private static $file = __DIR__ . "/../.env";
     protected $conn;
+    private $pathEstilo;
 
     private static function loadEnv() {
         if (!file_exists(self::$file)) {
@@ -34,6 +34,8 @@ abstract class DB {
             $this->dbName = $_ENV['SISPLANHOST'];
             $this->port = $_ENV['SISPLANPORT'];
             $this->path = $_ENV['SISPLANPATH'];
+
+            $this->pathEstilo = $_ENV['PATHESTILO'];
     
             $this->tkBAbstract = $_ENV['TKB']; 
 
@@ -45,6 +47,10 @@ abstract class DB {
 
     protected function getConn(): PDO {
         return $this->conn;
+    }
+
+    protected function getPathEstilo(): string {
+        return $this->pathEstilo;
     }
 
     protected function logSisplanConn(string $empresa, string $descricao, $user) {

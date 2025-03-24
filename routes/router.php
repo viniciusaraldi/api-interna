@@ -28,5 +28,10 @@ $routes = [
         require_once __DIR__ . "/../controller/Financeiro.php";
         $financeiro = new Financeiro();
         return $financeiro->$method($params);
+    },
+    'estilo' => function($method, ...$params) {
+        require_once __DIR__ . "/../controller/Estilo.php";
+        $estilo = new Estilo();
+        return $estilo->$method($params);
     }
 ];
