@@ -25,14 +25,24 @@ class Estilo extends DB {
             ], 403);
             exit;
         }
+
+        $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        if (empty($result)) {
+            return Response::json([
+                'success' => false,
+                'messagem' => "Nenhum resultado encontrado para a query",
+                'sql' => $sql,
+            ], 404);
+        }
+        
         return $allData == 0 ? (
-            $column == '' ? $stmt->fetchAll(PDO::FETCH_ASSOC)[0] : $stmt->fetchAll(PDO::FETCH_ASSOC)[0][strtoupper($column)]
-            ) : ['colunas' => $stmt->fetchAll(PDO::FETCH_ASSOC), 'linhas' => $stmt->rowCount()];
+            $column == '' ? $result[0] : $result[0][strtoupper($column)]
+            ) : ['colunas' => $result, 'linhas' => $stmt->rowCount()];
     }
-    private function insertAmostra($id, $amostra, $prototipo, $pontosMedicao, $tolerancia, $toleranciaMin, $toleranciaMax, $tamanhos, $valorTamanhos, $status = 0) {
+    private function insertAmostra($id, $amostra, $prototipo, $pontosMedicao, $tolerancia, $toleranciaMin, $toleranciaMax, $tamanhos, $valorTamanhos, $status = 0, $valorTamanhosReal) {
         try {
-            $data = $this->getSql("INSERT INTO $this->tableDb (id,amostra, prototipo, pontos_Medicao, tolerancia, tolerancia_min, tolerancia_max, tamanhos, valor_tamanhos, status) VALUES 
-            ($id, $amostra, '$prototipo','$pontosMedicao', $tolerancia,$toleranciaMin, $toleranciaMax,'$tamanhos', '$valorTamanhos', $status)", '', 1);
+            $data = $this->getSql("INSERT INTO $this->tableDb (id,amostra, prototipo, pontos_Medicao, tolerancia, tolerancia_min, tolerancia_max, tamanhos, valor_tamanhos, status, valor_tamanhos_real) VALUES 
+            ($id, $amostra, '$prototipo','$pontosMedicao', $tolerancia,$toleranciaMin, $toleranciaMax,'$tamanhos', '$valorTamanhos', $status, '$valorTamanhosReal')", '', 1);
             return [
                 'rowsAffected' => $data['linhas'],
                 'id' => $id,
@@ -44,7 +54,8 @@ class Estilo extends DB {
                 'maxima' => $toleranciaMax,
                 'tamanhos' => $tamanhos,
                 'valorTamanhos' => $valorTamanhos,
-                'status' => $status
+                'status' => $status,
+                'valorTamanhosReal' => $valorTamanhosReal,
             ];
         } catch (Exception $e) {
             return Response::json([
@@ -60,7 +71,6 @@ class Estilo extends DB {
         $fullPath = str_replace("\\", '/', realpath(__DIR__ . "/../public")) . $path . $prototipo . "/";
 
         if (file_exists($fullPath)) {
-            echo $amostra;
             if (file_exists($fullPath . "/$amostra")) {
                 return true;
             } else {
@@ -307,7 +317,7 @@ class Estilo extends DB {
             $amostra = isset($data['amostra']) ? $data['amostra'] : 0;
             $prototipo = $this->getPrototipo($data['prototipo']) ? $data['prototipo'] : false;
             $data = $this->getAmostra(['amostra' => $amostra, 'prototipo' => $prototipo]);
-            $obsAmostra = $data['obs_amostra'] == '' || $data['obs_amostra'] == null ? $obsAmostraRequesition : $data['obs_amostra'];
+            $obsAmostra = !isset($data['obs_amostra']) || $data['obs_amostra'] == '' || $data['obs_amostra'] == null ? $obsAmostraRequesition : $data['obs_amostra'];
             if ($files == null) {
                 $info = $this->getSql("UPDATE $this->tableDb SET OBS_AMOSTRA = '$obsAmostra' where amostra = $amostra and prototipo= '$prototipo'", '', 1);
                 return Response::json([
@@ -323,7 +333,6 @@ class Estilo extends DB {
                     $extension = $file['type'];
                     $tempNome = $file['tmp_name'];
                     if ($extension == "image/png" || $extension == 'image/jpg' || $extension == 'image/jpeg') {
-                        // var_dump(self::existsPathIamgeAmostra("/fotos/amostras/", $prototipo, $amostra));
                         self::existsPathIamgeAmostra("/fotos/amostras/", $prototipo, $amostra);
 
                         if(move_uploaded_file($tempNome, __DIR__ . self::$pathfile . "$prototipo/$amostra/" . basename($name))) {
@@ -350,6 +359,7 @@ class Estilo extends DB {
                         $responseImage[] = [
                             'file' => $name,
                             'extensao' => $extension,
+                            'temp_nome' => $tempNome,
                             'message' => "Não inserido no servidor por causa da extensao nao aceita, somente PNG e JPG",
                             'linhas_afetadas' => 0,
                         ];
@@ -387,7 +397,7 @@ class Estilo extends DB {
 
             foreach ($datas as $data) {
                 if (is_array($data) && $this->isSetAmostraDatas($data) && $this->getPrototipo($data['prototipo'])) {
-                    $info[] = $this->insertAmostra($id, $amostra, $data['prototipo'],$data['pontos_medicao'],$data['tolerancia'], $data['tolerancia_min'], $data['tolerancia_max'], $data['tamanhos'], $data['valor_tamanhos']);
+                    $info[] = $this->insertAmostra($id, $amostra, $data['prototipo'],$data['pontos_medicao'],$data['tolerancia'], $data['tolerancia_min'], $data['tolerancia_max'], $data['tamanhos'], $data['valor_tamanhos'], 0, $data['valor_tamanhos_real']);
                     $id = (int) $this->getSql("SELECT cast(COALESCE(max(id),1) as numeric) id FROM $this->tableDb", 'id', 1)['colunas'][0]['ID'] + 1;
                 } else {
                     if (is_array($data)) {
