@@ -244,7 +244,7 @@ class Financeiro extends DB {
 
     // Devolve o ultimo lançamento feito
     private function getUltimoLancamento() {
-        $sql = "select l.* from lancamento l where tela = 'TfmBaixaReceberLote' order by l.lancamento desc rows 1;";
+        $sql = "select max(l.lancamento) LANCAMENTO from lancamento l";
         $stmt = $this->conn->prepare($sql);
         $stmt->execute();
         $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
