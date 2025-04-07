@@ -6,21 +6,43 @@ require_once __DIR__ . "/../http/Response.php";
 class Estilo extends DB {
 
     public static $pathfile = "/../public/fotos/amostras/";
-    public static $destPathFile = parent::getPathEstilo();
-    private $tableDb = 'TABF07';
-    public function __construct() {parent::__construct();}
+    public static $destPathFile;
+    private $tableDb = 'TABF08';
+    
+    public function __construct() {
+        parent::__construct();
+        self::$destPathFile = parent::getPathEstilo();
+    }
 
     private function getSql($sql, $column = '', $allData = 0) {
         $stmt = $this->getConn()->prepare($sql);
         $stmt->execute();
+        if (!$stmt->execute()) {
+            return Response::json([
+                'success' => false,
+                'messagem' => "Houve algum problema ao preparar o comando",
+                'sql' => $sql,
+            ], 403);
+            exit;
+        }
+
+        $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        if (empty($result)) {
+            return Response::json([
+                'success' => false,
+                'messagem' => "Nenhum resultado encontrado para a query",
+                'sql' => $sql,
+            ], 404);
+        }
+        
         return $allData == 0 ? (
-            $column == '' ? $stmt->fetchAll(PDO::FETCH_ASSOC)[0] : $stmt->fetchAll(PDO::FETCH_ASSOC)[0][strtoupper($column)]
-            ) : ['colunas' => $stmt->fetchAll(PDO::FETCH_ASSOC), 'linhas' => $stmt->rowCount()];
+            $column == '' ? $result[0] : $result[0][strtoupper($column)]
+            ) : ['colunas' => $result, 'linhas' => $stmt->rowCount()];
     }
-    private function insertAmostra($id, $amostra, $prototipo, $pontosMedicao, $tolerancia, $toleranciaMin, $toleranciaMax, $tamanhos, $valorTamanhos, $status = 0) {
+    private function insertAmostra($id, $amostra, $prototipo, $pontosMedicao, $tolerancia, $toleranciaMin, $toleranciaMax, $tamanhos, $valorTamanhos, $status = 0, $valorTamanhosReal) {
         try {
-            $data = $this->getSql("INSERT INTO $this->tableDb (id,amostra, prototipo, pontos_Medicao, tolerancia, tolerancia_min, tolerancia_max, tamanhos, valor_tamanhos, status) VALUES 
-            ($id, '$amostra', '$prototipo','$pontosMedicao', '$tolerancia','$toleranciaMin', '$toleranciaMax','$tamanhos', '$valorTamanhos', $status)", '', 1);
+            $data = $this->getSql("INSERT INTO $this->tableDb (id,amostra, prototipo, pontos_Medicao, tolerancia, tolerancia_min, tolerancia_max, tamanhos, valor_tamanhos, status, valor_tamanhos_real) VALUES 
+            ($id, $amostra, '$prototipo','$pontosMedicao', $tolerancia,$toleranciaMin, $toleranciaMax,'$tamanhos', '$valorTamanhos', $status, '$valorTamanhosReal')", '', 1);
             return [
                 'rowsAffected' => $data['linhas'],
                 'id' => $id,
@@ -32,7 +54,8 @@ class Estilo extends DB {
                 'maxima' => $toleranciaMax,
                 'tamanhos' => $tamanhos,
                 'valorTamanhos' => $valorTamanhos,
-                'status' => $status
+                'status' => $status,
+                'valorTamanhosReal' => $valorTamanhosReal,
             ];
         } catch (Exception $e) {
             return Response::json([
@@ -45,15 +68,19 @@ class Estilo extends DB {
         return isset($data['prototipo'],$data['pontos_medicao'],$data['tolerancia'], $data['tolerancia_min'], $data['tolerancia_max'], $data['tamanhos'], $data['valor_tamanhos']);
     }
     private static function existsPathIamgeAmostra($path, $prototipo, $amostra) {
-        $fullPath = realpath(__DIR__ . "/../public") . $path . $prototipo . "/";
+        $fullPath = str_replace("\\", '/', realpath(__DIR__ . "/../public")) . $path . $prototipo . "/";
 
-        if (!file_exists($fullPath)) {
-            $prototipo = mkdir($fullPath, 0777, true);
-            $amostra = mkdir($fullPath . $amostra, 0777, true);
-            return true;
+        if (file_exists($fullPath)) {
+            if (file_exists($fullPath . "/$amostra")) {
+                return true;
+            } else {
+                mkdir($fullPath . "/$amostra", 0777, true);
+                return true;
+            }
         } else {
-            return false;
-        }   
+            mkdir($fullPath, 0777, true);
+            $amostra = mkdir($fullPath . $amostra, 0777, true);
+        }
     }
     private function getPrototipo(string $prototipo) {
         return $this->getSql("SELECT * FROM PRODUTO_001 WHERE PROTOTIPO = '$prototipo'", 'prototipo', 0) == '' ? false : true;
@@ -95,7 +122,7 @@ class Estilo extends DB {
             return Response::json([
                 'success' => false,
                 'messagem' => "Error: " . $e->getMessage(),
-            ], status: 500);
+            ], 500);
         }
     }
     public function post(array $path) {
@@ -142,12 +169,12 @@ class Estilo extends DB {
         }
     } 
     private function getPrototipoPorAmostra () {
-        return $this->getSql("SELECT PROTOTIPO, list(amostra) AS amostra FROM (SELECT distinct prototipo, amostra FROM $this->tableDb order by prototipo, amostra) GROUP BY prototipo", '', 1);
+        return $this->getSql("SELECT  DISTINCT PROTOTIPO, list(amostra) AS amostra FROM (SELECT distinct prototipo, amostra FROM $this->tableDb order by prototipo, amostra) GROUP BY prototipo", '', 1);
     }
-    private function getImagesAmostras(null|array $data = null) {
+    private function getImagesAmostras(array $data = []) {
         try {
             list($amostra, $prototipo) = isset($data['amostra'], $data['prototipo']) ? [$data['amostra'],$data['prototipo']] : [null,null];
-            $sql = "SELECT prototipo, amostra, foto_frente, foto_costa, foto_lateral, obs_amostra from $this->tableDb where amostra = $amostra and prototipo = '$prototipo'";
+            $sql = "SELECT  DISTINCT prototipo, amostra, foto_frente, foto_costa, foto_lateral, obs_amostra from $this->tableDb where amostra = $amostra and prototipo = '$prototipo'";
             
             $info = $this->getSql($sql, '', 1);
             if ($info) {
@@ -178,23 +205,23 @@ class Estilo extends DB {
             ], 500);
         }
     }
-    private function getAmostra(null|array $data = null) {
+    private function getAmostra(array $data = []) {
         try {
             $sql = '';
             if (is_array($data) && $data['prototipo'] && $data['amostra']) {
                 $amostra = $data['amostra'];
                 $prototipo = $data['prototipo'];
-                $sql = "SELECT * FROM $this->tableDb f where F.AMOSTRA = '$amostra' and F.PROTOTIPO = '$prototipo' order by prototipo, amostra, id";
+                $sql = "SELECT DISTINCT * FROM $this->tableDb f where F.AMOSTRA = $amostra and F.PROTOTIPO = '$prototipo' order by prototipo, amostra, id";
             } else if (is_array($data) && $data['prototipo']) {
                 $prototipo = $data['prototipo'];
-                $sql = "SELECT * FROM $this->tableDb f where F.PROTOTIPO = '$prototipo' order by prototipo, amostra, id";
+                $sql = "SELECT DISTINCT * FROM $this->tableDb f where F.PROTOTIPO = '$prototipo' order by prototipo, amostra, id";
             } else {
-                $sql = 'SELECT * FROM $this->tableDb f order by prototipo, amostra, id';
+                $sql = "SELECT DISTINCT * FROM $this->tableDb f order by prototipo, amostra, id";
             }
             return Response::json([
                 'success' => true,
                 'messagem' => $this->getSql($sql, '', 1),
-            ], status: 200);
+            ], 200);
         } catch (PDOException $e) {
             return Response::json([
                 'success' => false,
@@ -208,13 +235,15 @@ class Estilo extends DB {
         }
     }
     private function getFaixaPrototipo(array $amostra) {
-        !isset($amostra['prototipo']) ?? Response::json([
-            'success' => false,
-            'messagem' => "Não foi possivel encontrar o prototipo",
-        ], 404);
+        if (!isset($amostra['prototipo'])) {
+            return Response::json([
+                'success' => false,
+                'messagem' => "Não foi possivel encontrar o prototipo",
+            ], 404);
+        }
 
         $prototipo = $amostra['prototipo'];
-        $data = $this->getSql("SELECT '$prototipo' as prototipo, f.faixa, f.posicao, f.tamanho FROM FAIXA_ITEN_001 f WHERE f.FAIXA IN (SELECT faixa FROM produto_001 p WHERE p.PROTOTIPO = '$prototipo')", '', 1);
+        $data = $this->getSql("SELECT  DISTINCT '$prototipo' as prototipo, f.faixa, f.posicao, f.tamanho FROM FAIXA_ITEN_001 f WHERE f.FAIXA IN (SELECT faixa FROM produto_001 p WHERE p.PROTOTIPO = '$prototipo')", '', 1);
         return isset($data['colunhas']) ? $data['colunas'] : $data;
     }
     private function setStatus ($data) {
@@ -232,7 +261,7 @@ class Estilo extends DB {
                     'amostra' => $data['amostra'],
                     'prototipo' => $data['prototipo'],
                     'status' => $status
-                ],) :  Response::json([
+                ]) :  Response::json([
                     'success' => false,
                     'message' => "Não foi atualizado o status da amostra por algum motivo, entre em contato com o desenvolvedor",
                     'amostra' => $data['amostra'],
@@ -288,7 +317,7 @@ class Estilo extends DB {
             $amostra = isset($data['amostra']) ? $data['amostra'] : 0;
             $prototipo = $this->getPrototipo($data['prototipo']) ? $data['prototipo'] : false;
             $data = $this->getAmostra(['amostra' => $amostra, 'prototipo' => $prototipo]);
-            $obsAmostra = $data['obs_amostra'] == '' || $data['obs_amostra'] == null ? $obsAmostraRequesition : $data['obs_amostra'];
+            $obsAmostra = !isset($data['obs_amostra']) || $data['obs_amostra'] == '' || $data['obs_amostra'] == null ? $obsAmostraRequesition : $data['obs_amostra'];
             if ($files == null) {
                 $info = $this->getSql("UPDATE $this->tableDb SET OBS_AMOSTRA = '$obsAmostra' where amostra = $amostra and prototipo= '$prototipo'", '', 1);
                 return Response::json([
@@ -303,7 +332,7 @@ class Estilo extends DB {
                     $name = $file['name'];
                     $extension = $file['type'];
                     $tempNome = $file['tmp_name'];
-                    if ($extension == "image/png" || $extension == 'image/jpg') {
+                    if ($extension == "image/png" || $extension == 'image/jpg' || $extension == 'image/jpeg') {
                         self::existsPathIamgeAmostra("/fotos/amostras/", $prototipo, $amostra);
 
                         if(move_uploaded_file($tempNome, __DIR__ . self::$pathfile . "$prototipo/$amostra/" . basename($name))) {
@@ -326,6 +355,14 @@ class Estilo extends DB {
                                 'linhas_afetadas' => 0,
                             ];
                         }
+                    } else {
+                        $responseImage[] = [
+                            'file' => $name,
+                            'extensao' => $extension,
+                            'temp_nome' => $tempNome,
+                            'message' => "Não inserido no servidor por causa da extensao nao aceita, somente PNG e JPG",
+                            'linhas_afetadas' => 0,
+                        ];
                     }
                 }
                 return Response::json([
@@ -353,15 +390,15 @@ class Estilo extends DB {
     private function setAmostra(array $datas) {
         try {
             $prototipo = $this->getPrototipo($datas[0]['prototipo']) ? $datas[0]['prototipo'] : 0;
-            $amostra = $this->getSql("SELECT cast(COALESCE(max(amostra),0) as numeric) amostra FROM $this->tableDb where prototipo = '$prototipo'", 'amostra', 1)['colunas'][0]['AMOSTRA'] + 1;
-
+            $amostra = (int) $this->getSql("SELECT cast(COALESCE(max(amostra),0) as numeric) amostra FROM $this->tableDb where prototipo = '$prototipo'", 'amostra', 1)['colunas'][0]['AMOSTRA'] + 1;
             $info = [];
             
-            $id = $this->getSql('SELECT cast(COALESCE(max(id),1) as numeric) id FROM $this->tableDb', 'id', 1)['colunas'][0]['ID'];
+            $id = (int) $this->getSql("SELECT cast(COALESCE(max(id),1) as numeric) id FROM $this->tableDb", 'id', 1)['colunas'][0]['ID'];
+
             foreach ($datas as $data) {
                 if (is_array($data) && $this->isSetAmostraDatas($data) && $this->getPrototipo($data['prototipo'])) {
-                    $info[] = $this->insertAmostra($id, $amostra, $data['prototipo'],$data['pontos_medicao'],$data['tolerancia'], $data['tolerancia_min'], $data['tolerancia_max'], $data['tamanhos'], $data['valor_tamanhos']);
-                    $id = $this->getSql('SELECT cast(COALESCE(max(id),1) as numeric) id FROM $this->tableDb', 'id', 1)['colunas'][0]['ID'] + 1;
+                    $info[] = $this->insertAmostra($id, $amostra, $data['prototipo'],$data['pontos_medicao'],$data['tolerancia'], $data['tolerancia_min'], $data['tolerancia_max'], $data['tamanhos'], $data['valor_tamanhos'], 0, $data['valor_tamanhos_real']);
+                    $id = (int) $this->getSql("SELECT cast(COALESCE(max(id),1) as numeric) id FROM $this->tableDb", 'id', 1)['colunas'][0]['ID'] + 1;
                 } else {
                     if (is_array($data)) {
                         return Response::json([
