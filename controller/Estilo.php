@@ -27,13 +27,13 @@ class Estilo extends DB {
         }
 
         $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        if (empty($result)) {
-            return Response::json([
-                'success' => false,
-                'messagem' => "Nenhum resultado encontrado para a query",
-                'sql' => $sql,
-            ], 404);
-        }
+        // if (empty($result)) {
+        //     return Response::json([
+        //         'success' => false,
+        //         'messagem' => "Nenhum resultado encontrado para a query",
+        //         'sql' => $sql,
+        //     ], 404);
+        // }
         
         return $allData == 0 ? (
             $column == '' ? $result[0] : $result[0][strtoupper($column)]
@@ -253,19 +253,53 @@ class Estilo extends DB {
             $status = (int) $data['status'];
             if (is_integer($status) && $amostra) {
                 $numAmostra = $data['amostra'];
-                $sql = "UPDATE $this->tableDb set status = $status where amostra = '$numAmostra'";
+                $pcpMedidas = [];
+
+                if ($status == 1) {
+                    $sqlAmostra = "SELECT DISTINCT * FROM $this->tableDb where amostra = $numAmostra and prototipo = '$prototipo' ";
+                    $dataAmostra = $this->getSql($sqlAmostra, '', 1)['colunas'];
+                    $order = 1;
+
+                    foreach ($dataAmostra as $value) {
+                        $prototipo = $value['PROTOTIPO'];
+                        $pontosMedicao  = $value['PONTOS_MEDICAO'];
+                        $tolerancia = $value['TOLERANCIA'];
+                        $toleranciaMin = $value['TOLERANCIA_MIN'];
+                        $toleranciaMax = $value['TOLERANCIA_MAX'];
+
+                        $tam = explode(",", $value['TAMANHOS']);
+                        $valTam = explode(",", $value['VALOR_TAMANHOS']);
+                        $valTamReal = explode(",", $value['VALOR_TAMANHOS_REAL']);
+                        
+                        for ($i = 0; $i < count($tam); $i++) {
+                            $sqlPcpMedidas = "INSERT INTO PCP_MEDIDAS_001 (ORDEM, CODIGO, DESCRICAO, TAM, TOLERANCIA, TOLERANCIA_MIN, TOLERANCIA_MAX, TIPO_MEDIDA, DESC_TIPO_MEDIDA, TIPO, MEDIDA, MEDIDA2) 
+                                VALUES ('$order', '$prototipo', '$pontosMedicao', '$tam[$i]', $tolerancia, $toleranciaMin, $toleranciaMax, 'F', 'FINAL', 'P', '$valTamReal[$i]', '$valTamReal[$i]')";
+                            $rowS = $this->getSql($sqlPcpMedidas, '', 1);
+                            $pcpMedidas[] = $rowS;
+                        }
+
+                        $order += 1;
+                    }
+                } else {
+                    $sqlAmostra = "DELETE FROM $this->tableDb where amostra = $numAmostra and prototipo = '$prototipo' ";
+                    $dataAmostra = $this->getSql($sqlAmostra, '', 1)['linhas'];
+                    $pcpMedidas[] = "Linhas removidas" . $dataAmostra;
+                }
+                $sql = "UPDATE $this->tableDb set status = $status where amostra = $numAmostra and prototipo = '$prototipo' ";
                 $row = $this->getSql($sql, '', 1)['linhas'];
                 return isset($row) && $row > 0 ? Response::json([
                     'success' => true,
                     'message' => "Atualizado com sucesso",
                     'amostra' => $data['amostra'],
                     'prototipo' => $data['prototipo'],
+                    'pcp_medidas' => $pcpMedidas,
                     'status' => $status
                 ]) :  Response::json([
                     'success' => false,
                     'message' => "Não foi atualizado o status da amostra por algum motivo, entre em contato com o desenvolvedor",
                     'amostra' => $data['amostra'],
                     'prototipo' => $data['prototipo'],
+                    'pcp_medidas' => $pcpMedidas,
                     'status' => $status
                 ], 403);
             }

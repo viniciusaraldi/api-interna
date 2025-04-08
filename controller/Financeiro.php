@@ -210,7 +210,7 @@ class Financeiro extends DB {
 
             if ($stmt->rowCount() > 0) {
                 // incrementa +1 no uúltimo lançamento;
-                $this->setUltimoLancamento();
+                $this->setUltimoLancamento($lancamento);
                 
                 // abate o valor da duplicata do cliente
                 $this->editAbateReceberCliente($duplicata, $valorParcela);
@@ -244,7 +244,7 @@ class Financeiro extends DB {
 
     // Devolve o ultimo lançamento feito
     private function getUltimoLancamento() {
-        $sql = "select max(l.lancamento) LANCAMENTO from lancamento l";
+        $sql = "select l.* from lancamento l WHERE 1 = 1 ORDER BY l.LANCAMENTO DESC ROWS 1";
         $stmt = $this->conn->prepare($sql);
         $stmt->execute();
         $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -252,10 +252,10 @@ class Financeiro extends DB {
     }
 
     // Incrementa +1 no ultimo lançamento pego
-    private function setUltimoLancamento() {
+    private function setUltimoLancamento($lanc) {
         $data = new DateTime();
         $dateTime = $data->format("Y-m-d H:i:s.v");
-        $lanc = $this->getUltimoLancamento();
+
         $lancamento = $lanc + 1;
 
         $sql = "INSERT INTO lancamento (DATA, LANCAMENTO, TELA, USUARIO) VALUES ('$dateTime', '$lancamento','TfmBaixaReceberLote','AUTO_INTERNO')";
