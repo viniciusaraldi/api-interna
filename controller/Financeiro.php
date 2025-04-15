@@ -245,6 +245,7 @@ class Financeiro extends DB {
     // Devolve o ultimo lançamento feito
     private function getUltimoLancamento() {
         $sql = "select l.* from lancamento l WHERE 1 = 1 ORDER BY l.LANCAMENTO DESC ROWS 1";
+        // $sql = "SELECT max(la.SEQUENCIA) LANCAMENTO FROM LANC_AUX_001 la";
         $stmt = $this->conn->prepare($sql);
         $stmt->execute();
         $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -353,6 +354,7 @@ class Financeiro extends DB {
         AND PEDIDO.EMP_FAT = '003'
         AND PEDIDO.ART_CLI <> ''
         AND RECEBER.DT_EMISSAO between '$dataInicial' and '$dataFinal'
+        AND PEDIDO.NUMERO = '61861'
         AND RECEBER.NUMERO NOT IN (SELECT DISTINCT BAIXA.NUMERO FROM RECEBERB_003 BAIXA WHERE BAIXA.TELA_BAIXA IN ('AutomacaoBaixaCartaoBelluno','TfmBaixaReceberLote'))
         AND RECEBER.NUMERO NOT LIKE '%C/%'
         AND (RECEBER.VALOR - RECEBER.VALOR_PAGO) <> 0
