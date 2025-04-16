@@ -1,5 +1,7 @@
 <?php
 
+require __DIR__ . "/../http/Response.php";
+
 abstract class DB {
     private $dbName;
     private $path;
@@ -79,5 +81,22 @@ abstract class DB {
         }
     }
 
+    protected function curlApi (string $urlApi, array $headers) {
+        try {
+            $init = curl_init();
+            curl_setopt_array($init,[
+                CURLOPT_URL => $urlApi,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_SSL_VERIFYHOST => false,
+                CURLOPT_HTTPHEADER => $headers,
+            ]);
+            return json_decode(curl_exec($init), true);
+        } catch (Exception $e) {
+            return Response::json([
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
 
 } 

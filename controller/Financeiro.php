@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../config/init.php';
+require_once __DIR__ . "/../http/Response.php";
 
 class Financeiro extends DB {
     private $req;
@@ -31,16 +32,14 @@ class Financeiro extends DB {
                 case 'insertDuplicataCartao':
                     return $this->{$funcao}($queryString);
                 default:
-                    return [
-                        'status' => 404,
-                        'messagem' => 'Não foi encontrado a rota ' . $path[0],
-                    ];
+                    return Response::json([
+                       'messagem' => 'Não foi encontrado a rota ' . $path[0],
+                    ], 404);
             }
         } catch (Exception $e) {
-            return [
-                "status" => 500,
-                "data" => "Error: " . $e->getMessage(),
-            ];
+            return Response::json([
+                'message' => $e->getMessage(),
+            ], 500);
         }
     }
 
@@ -75,7 +74,8 @@ class Financeiro extends DB {
                 } else {
                     for ($num = 0; $num < $qtdeVezes; $num++) {
                         $dataVencimentoDuplicata = (new DateTime($parcelas[$num]['credit_date']))->format('Y-m-d');
-                        $lancamento = $this->getUltimoLancamento();      
+
+                        $lancamento = $this->setNovaSequencia();      
     
                         // Inserindo Duplicata de cartão no receber
                         $this->insertReceberCartao(
@@ -99,17 +99,16 @@ class Financeiro extends DB {
                 }
                 
             }
-            return [
+            return Response::json([
                 'status' => 200,
                 'pedidos_manuais' => $pedidosManuais,
                 'pedidos_sucessos' => $pedidosSucesso,
                 'message' => 'Programa Finalizado',
-            ];
+            ], 200);
         } catch (Exception $e) {
-            return [
-                'status' => 500,
+            return Response::json([
                 'message' => $e->getMessage(),
-            ];
+            ], 500);
         }
     }
 
@@ -242,23 +241,32 @@ class Financeiro extends DB {
         }
     }
 
-    // Devolve o ultimo lançamento feito
-    private function getUltimoLancamento() {
-        $sql = "select l.* from lancamento l WHERE 1 = 1 ORDER BY l.LANCAMENTO DESC ROWS 1";
+    // Gera um novo GEN_ID para a tabela lanc_aux_001;
+    private function setNovaSequencia() {
+        $sql = 'SELECT GEN_ID(G_LANC_AUX_001_SEQUENCIA, 1) AS NOVO FROM RDB$DATABASE';
         $stmt = $this->conn->prepare($sql);
         $stmt->execute();
         $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        return $data[0]['LANCAMENTO'];
+        
+        $genId = $data[0]['NOVO'];
+
+        $sqlLancAux = "INSERT INTO LANC_AUX_001 (SEQUENCIA) VALUES ($genId)";
+        $stmtLancAux = $this->conn->prepare($sqlLancAux);
+        $stmtLancAux->execute();
+
+        return $genId;
     }
 
-    // Incrementa +1 no ultimo lançamento pego
-    private function setUltimoLancamento($lanc) {
+    // Insere na tabela de lancamentos
+    private function setUltimoLancamento($lancamento) {
         $data = new DateTime();
         $dateTime = $data->format("Y-m-d H:i:s.v");
 
-        $lancamento = $lanc + 1;
+        $sqlLancAux = "INSERT INTO LANC_AUX_001 (SEQUENCIA) VALUES ('$lancamento')";
+        $stmtLancAux = $this->conn->prepare($sqlLancAux);
+        $stmtLancAux->execute();
 
-        $sql = "INSERT INTO lancamento (DATA, LANCAMENTO, TELA, USUARIO) VALUES ('$dateTime', '$lancamento','TfmBaixaReceberLote','AUTO_INTERNO')";
+        $sql = "INSERT INTO lancamento (DATA, LANCAMENTO, TELA, USUARIO) VALUES ('$dateTime', $lancamento,'TfmBaixaReceberLote','AUTO_INTERNO')";
         $stmt = $this->conn->prepare($sql);
         $stmt->execute();
     }
@@ -351,7 +359,6 @@ class Financeiro extends DB {
         INNER JOIN RECEBER_003 RECEBER ON RECEBER.FATURA = NOTA.FATURA 
         WHERE 1 = 1
         AND PEDIDO.EMP_FAT = '003'
-        AND PEDIDO.ART_CLI <> ''
         AND RECEBER.DT_EMISSAO between '$dataInicial' and '$dataFinal'
         AND RECEBER.NUMERO NOT IN (SELECT DISTINCT BAIXA.NUMERO FROM RECEBERB_003 BAIXA WHERE BAIXA.TELA_BAIXA IN ('AutomacaoBaixaCartaoBelluno','TfmBaixaReceberLote'))
         AND RECEBER.NUMERO NOT LIKE '%C/%'
@@ -369,23 +376,31 @@ class Financeiro extends DB {
         try {
             $tk = $this->token();
             $url = 'https://bonfitness.com.br/api/v1/pedidos?campos_personalizados[pedido_portomontt]='.$pedido;
-            $init = curl_init();
-            curl_setopt_array($init,[
-                CURLOPT_URL => $url,
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_SSL_VERIFYPEER => false,
-                CURLOPT_SSL_VERIFYHOST => false,
-                CURLOPT_HTTPHEADER => [
+            
+            $data = parent::curlApi(
+                $url,
+                [
                     "Content-type: application/json",
                     "Authorization: $tk",
-                ],
-            ]);
-            return json_decode(curl_exec($init), true);
+                ]
+                );
+            // $init = curl_init();
+            // curl_setopt_array($init,[
+            //     CURLOPT_URL => $url,
+            //     CURLOPT_RETURNTRANSFER => true,
+            //     CURLOPT_SSL_VERIFYPEER => false,
+            //     CURLOPT_SSL_VERIFYHOST => false,
+            //     CURLOPT_HTTPHEADER => [
+            //         "Content-type: application/json",
+            //         "Authorization: $tk",
+            //     ],
+            // ]);
+            // return json_decode(curl_exec($init), true);
+            return $data;
         } catch (Exception $e) {
-            return [
-                'status' => 500,
+            return Response::json([
                 'message' => $e->getMessage(),
-            ];
+            ], 500);
         }
     }
 
@@ -393,23 +408,32 @@ class Financeiro extends DB {
     private function validaInfoBelluno($transacao) {
         try {
             $url = 'https://api.belluno.digital/v2/transaction/'.$transacao;
-            $init = curl_init();
-            curl_setopt_array($init,[
-                CURLOPT_URL => $url,
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_SSL_VERIFYPEER => false,
-                CURLOPT_SSL_VERIFYHOST => false,
-                CURLOPT_HTTPHEADER => [
+
+            $data = parent::curlApi(
+                $url,
+                [
                     "Content-type: application/json",
                     "Authorization: Bearer " . $this->tkb,
-                ],
-            ]);
-            return json_decode(curl_exec($init), true);
+                ]
+                );
+
+            // $init = curl_init();
+            // curl_setopt_array($init,[
+            //     CURLOPT_URL => $url,
+            //     CURLOPT_RETURNTRANSFER => true,
+            //     CURLOPT_SSL_VERIFYPEER => false,
+            //     CURLOPT_SSL_VERIFYHOST => false,
+            //     CURLOPT_HTTPHEADER => [
+            //         "Content-type: application/json",
+            //         "Authorization: Bearer " . $this->tkb,
+            //     ],
+            // ]);
+            // return json_decode(curl_exec($init), true);
+            return $data;
         } catch (Exception $e) {
-            return [
-                'status' => 500,
+            return Response::json([
                 'message' => $e->getMessage(),
-            ];
+            ], 500);
         }
     }
 }
