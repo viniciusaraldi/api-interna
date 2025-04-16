@@ -384,18 +384,6 @@ class Financeiro extends DB {
                     "Authorization: $tk",
                 ]
                 );
-            // $init = curl_init();
-            // curl_setopt_array($init,[
-            //     CURLOPT_URL => $url,
-            //     CURLOPT_RETURNTRANSFER => true,
-            //     CURLOPT_SSL_VERIFYPEER => false,
-            //     CURLOPT_SSL_VERIFYHOST => false,
-            //     CURLOPT_HTTPHEADER => [
-            //         "Content-type: application/json",
-            //         "Authorization: $tk",
-            //     ],
-            // ]);
-            // return json_decode(curl_exec($init), true);
             return $data;
         } catch (Exception $e) {
             return Response::json([
@@ -416,19 +404,6 @@ class Financeiro extends DB {
                     "Authorization: Bearer " . $this->tkb,
                 ]
                 );
-
-            // $init = curl_init();
-            // curl_setopt_array($init,[
-            //     CURLOPT_URL => $url,
-            //     CURLOPT_RETURNTRANSFER => true,
-            //     CURLOPT_SSL_VERIFYPEER => false,
-            //     CURLOPT_SSL_VERIFYHOST => false,
-            //     CURLOPT_HTTPHEADER => [
-            //         "Content-type: application/json",
-            //         "Authorization: Bearer " . $this->tkb,
-            //     ],
-            // ]);
-            // return json_decode(curl_exec($init), true);
             return $data;
         } catch (Exception $e) {
             return Response::json([
