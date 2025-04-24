@@ -53,10 +53,11 @@ class Estilo extends DB {
      * @param string $valorTamanhosReal
      * @return array|array{amostra: mixed, id: mixed, maxima: mixed, minima: mixed, ponto_medicao: mixed, prototipo: mixed, rowsAffected: mixed, status: mixed, tamanhos: mixed, tolerancia: mixed, valorTamanhos: mixed, valorTamanhosReal: mixed}
      */
-    private function insertAmostra($id, $amostra, $prototipo, $pontosMedicao, $tolerancia, $toleranciaMin, $toleranciaMax, $tamanhos, $valorTamanhos, $status = 0, $valorTamanhosReal) {
+    private function insertAmostra($id, $amostra, $prototipo, $pontosMedicao, $tolerancia, $toleranciaMin, $toleranciaMax, $tamanhos, $valorTamanhos, $valorTamanhosReal,  $status = 0) {
         try {
             $data = $this->getSql("INSERT INTO $this->tableDb (id,amostra, prototipo, pontos_Medicao, tolerancia, tolerancia_min, tolerancia_max, tamanhos, valor_tamanhos, status, valor_tamanhos_real) VALUES 
             ($id, $amostra, '$prototipo','$pontosMedicao', $tolerancia,$toleranciaMin, $toleranciaMax,'$tamanhos', '$valorTamanhos', $status, '$valorTamanhosReal')", '', 1);
+
             return [
                 'rowsAffected' => $data['linhas'],
                 'id' => $id,
@@ -176,7 +177,9 @@ class Estilo extends DB {
                 'setAmostra', 
                 'setFotosAmostra', 
                 'setTesteUso',
-                'setStatus'
+                'setStatus',
+                'setMedicaoAmostra',
+                'setDuplicaAmostra'
             ];
             $funcao = $path[0];
             $body = $path[2];
@@ -553,7 +556,7 @@ class Estilo extends DB {
 
             foreach ($datas as $data) {
                 if (is_array($data) && $this->isSetAmostraDatas($data) && $this->getPrototipo($data['prototipo'])) {
-                    $info[] = $this->insertAmostra($id, $amostra, $data['prototipo'],$data['pontos_medicao'],$data['tolerancia'], $data['tolerancia_min'], $data['tolerancia_max'], $data['tamanhos'], $data['valor_tamanhos'], 0, $data['valor_tamanhos_real']);
+                    $info[] = $this->insertAmostra($id, $amostra, $data['prototipo'],$data['pontos_medicao'],$data['tolerancia'], $data['tolerancia_min'], $data['tolerancia_max'], $data['tamanhos'], $data['valor_tamanhos'], $data['valor_tamanhos_real']);
                     $id = (int) $this->getSql("SELECT cast(COALESCE(max(id),1) as numeric) id FROM $this->tableDb", 'id', 1)['colunas'][0]['ID'] + 1;
                 } else {
                     if (is_array($data)) {
@@ -585,6 +588,142 @@ class Estilo extends DB {
                 'message' => "Amostras cadastradas com sucesso!",
                 'data' => $info,
             ], 200);
+        } catch (Exception $e) {
+            return Response::json([
+                'success' => false,
+                'messagem' => "Error: " . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Adiciona um ponto de medicão a uma amostra já existente
+     * @param array $data
+     * @return array
+     */
+    private function setMedicaoAmostra(array $data) {
+        try {
+            $prototitpo = $this->getAmostra([
+                        'prototipo' => isset($data['prototipo']) ? $data['prototipo'] : '',
+                        'amostra' => isset($data['amostra']) ? $data['amostra'] : ''
+                    ]);
+
+            $info = [
+                "prototipo" => $data['prototipo'],
+                "amostra" => $data['amostra'],
+                "pontos_medicao" => $data['pontos_medicao'],
+                "tolerancia" => $data['tolerancia'],
+                "tolerancia_min" => $data['tolerancia_min'],
+                "tolerancia_max" => $data['tolerancia_max'],
+                "valor_tamanhos" => $data['valor_tamanhos'],
+                "valor_tamanhos_real" => $data['valor_tamanhos_real'],
+                "tamanhos" => $data['tamanhos']
+            ]; 
+
+            if ($prototitpo['messagem']['linhas'] == 0) return Response::json([
+                    'message' => "Não foi encontrado a amostra ou o prototipo informado!",
+                    'data' => $info
+                ], 404);
+                    
+            if (!$this->isSetAmostraDatas($data)) return Response::json([
+                    'message' => "Há parametros faltando para incrementar o ponto de medição",
+                    'data' => $info
+                ], 404);
+
+            $id = (int) $this->getSql("SELECT cast(COALESCE(max(id),1) as numeric) id FROM $this->tableDb", 'id', 1)['colunas'][0]['ID'];
+
+            $insertPontoMedicaoAmostra = $this->insertAmostra(
+                $id,
+                $data['amostra'],
+                $data['prototipo'],
+                $data['pontos_medicao'],
+                $data['tolerancia'],
+                $data['tolerancia_min'],
+                $data['tolerancia_max'],
+                $data['tamanhos'],
+                $data['valor_tamanhos'],
+                $data['valor_tamanhos_real']                
+            );
+
+            return Response::json([
+                'message' => 'Inserido ponto de medição com sucesso na amostra ' . $data['amostra'] . ' do prototipo ' . $data['prototipo'] . '!',
+                'data' => $insertPontoMedicaoAmostra,
+            ]);
+
+        } catch (Exception $e) {
+            return Response::json([
+                'success' => false,
+                'messagem' => "Error: " . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Duplica amostra para um novo prototipo com os mesmos dados
+     * @param array $data
+     * @return array
+     */
+    private function setDuplicaAmostra(array $data) {
+        try {
+            $prototitpo = $this->getAmostra([
+                'prototipo' => isset($data['prototipo']) ? $data['prototipo'] : '',
+                'amostra' => isset($data['amostra']) ? $data['amostra'] : ''
+            ]);
+
+            if ($prototitpo['messagem']['linhas'] == 0) return Response::json([
+                'message' => "Não foi encontrado a amostra ou o prototipo informado!",
+                'data' => [
+                    'prototipo' => $data['prototipo'],
+                    'amostra' => $data['amostra']
+                ]
+            ], 404);
+
+            $infoNovaAmostra = [];
+
+            $faixa = '';
+
+            $tam = $this->getFaixaPrototipo(['prototipo' => $data['novo_prototipo']]);
+
+            foreach ($tam['colunas'] as $value) {
+                $faixa .= $value['TAMANHO'] . ",";
+            }
+            
+            $infos = $prototitpo['messagem']['colunas'];
+            foreach ($infos as $value) {
+                $infoNovaAmostra[] = [
+                    'id' => (int) $this->getSql("SELECT cast(COALESCE(max(id),1) as numeric) id FROM $this->tableDb", 'id', 1)['colunas'][0]['ID'],
+                    'tamanhos' => substr($faixa, 0, -1),
+                    'valor_tamanhos' => $value['VALOR_TAMANHOS'],
+                    'valor_tamanhos_real' => $value['VALOR_TAMANHOS_REAL'],
+                    'prototipo' => $data['novo_prototipo'],
+                    'pontos_medicao' => $value['PONTOS_MEDICAO'],
+                    'tolerancia' => (int) $value['TOLERANCIA'],
+                    'tolerancia_min' => (int) $value['TOLERANCIA_MIN'],
+                    'tolerancia_max' => (int) $value['TOLERANCIA_MAX'],
+                    'amostra' => (int) $this->getSql("SELECT cast(COALESCE(max(amostra),0) as numeric) amostra FROM $this->tableDb where prototipo = '{$data['novo_prototipo']}'", 'amostra', 1)['colunas'][0]['AMOSTRA'] + 1,
+                ];
+            }
+
+            $response = [];
+            foreach ($infoNovaAmostra as $value) {
+                $response[] = $this->insertAmostra(
+                    $value['id'],
+                    $value['amostra'],
+                    $value['prototipo'],
+                    $value['pontos_medicao'],
+                    $value['tolerancia'],
+                    $value['tolerancia_min'],
+                    $value['tolerancia_max'],
+                    $value['tamanhos'],
+                    $value['valor_tamanhos'],
+                    $value['valor_tamanhos_real']
+                );
+            }
+
+            return Response::json([
+                'message' => 'Amostra duplicata com sucesso!',
+                'data' => $response,
+            ]);
         } catch (Exception $e) {
             return Response::json([
                 'success' => false,
