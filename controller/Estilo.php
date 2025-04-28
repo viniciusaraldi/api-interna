@@ -7,7 +7,7 @@ class Estilo extends DB {
 
     public static $pathfile = "/../public/fotos/amostras/";
     public static $destPathFile;
-    private $tableDb = 'TABF07';
+    private $tableDb = 'TABF08';
     
     public function __construct() {
         parent::__construct();
@@ -633,7 +633,7 @@ class Estilo extends DB {
             $id = (int) $this->getSql("SELECT cast(COALESCE(max(id),1) as numeric) id FROM $this->tableDb", 'id', 1)['colunas'][0]['ID'];
 
             $insertPontoMedicaoAmostra = $this->insertAmostra(
-                $id,
+                $id + 1,
                 $data['amostra'],
                 $data['prototipo'],
                 $data['pontos_medicao'],
@@ -688,10 +688,12 @@ class Estilo extends DB {
                 $faixa .= $value['TAMANHO'] . ",";
             }
             
+            $id = (int) $this->getSql("SELECT cast(COALESCE(max(id),1) as numeric) id FROM $this->tableDb", 'id', 1)['colunas'][0]['ID'];
             $infos = $prototitpo['messagem']['colunas'];
             foreach ($infos as $value) {
+                $id++;
                 $infoNovaAmostra[] = [
-                    'id' => (int) $this->getSql("SELECT cast(COALESCE(max(id),1) as numeric) id FROM $this->tableDb", 'id', 1)['colunas'][0]['ID'],
+                    'id' => $id,
                     'tamanhos' => substr($faixa, 0, -1),
                     'valor_tamanhos' => $value['VALOR_TAMANHOS'],
                     'valor_tamanhos_real' => $value['VALOR_TAMANHOS_REAL'],
