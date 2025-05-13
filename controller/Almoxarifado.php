@@ -62,6 +62,10 @@ class Almoxarifado extends DB {
             $cor = '';
             $deposito = '';
             $lote = '';
+            $qualidade = '';
+            $operacao = '';
+            $qtdeMatMov = '';
+            $user = '';
 
             $mapa = [
                 'qtde' => &$qtde,
@@ -69,6 +73,10 @@ class Almoxarifado extends DB {
                 'cor' => &$cor,
                 'deposito' => &$deposito,
                 'lote' => &$lote,
+                'qualidade' => &$qualidade,
+                'operacao' => &$operacao,
+                'qtdeMatMov' => &$qtdeMatMov,
+                'user' => &$user,
             ];
 
             foreach ($infoQueryDivida as $value) {
@@ -80,7 +88,7 @@ class Almoxarifado extends DB {
 
             switch($funcao) {
                 case 'updateAtualizaEstoque':
-                    return $this->{$funcao}($qtde, $codigo, $cor, $deposito, $lote);
+                    return $this->{$funcao}($qtde, $codigo, $cor, $deposito, $lote, $qualidade, $operacao,  $qtdeMatMov, $user);
                 default:
                     return [
                         'status' => 404,
@@ -95,7 +103,7 @@ class Almoxarifado extends DB {
         }
     }
 
-    protected function getInventario(string $dataInicial, string $dataFinal, string $deposito, string $subGrupo, int $posicaoEstoque): array {
+    protected function getInventario(string $dataInicial, string $dataFinal, string $deposito, string $subGrupo, int $posicaoEstoque, int $qualidade = 1): array {
         if ($dataInicial == '' || $dataFinal == '' || $deposito == '') {
             return [
                 'response' => "Não é possivel buscar as informações de movimentação de estoque caso a data inicial e/ou final estejam vazios e o deposito estiver sem um valor atribuido, Data inicial: {$dataInicial} - Data final: {$dataFinal} - Deposito: {$deposito}, confira!",
@@ -125,9 +133,11 @@ class Almoxarifado extends DB {
             } else {
                 $condicaoPosicaoEstoque = '';
             }
+            // valida qualidade
+            $queryQualidade = "AND MI.QUALIDADE = $qualidade";
            
             $inventario = parent::getConn()->prepare("
-                SELECT mm.CODIGO, M.DESCRICAO, m.SUB_GRUPO, M.LOCAL, mm.COR, mm.DEPOSITO, 
+                SELECT mm.CODIGO, M.DESCRICAO, m.SUB_GRUPO, M.LOCAL, mm.COR, mm.DEPOSITO, mi.QUALIDADE,
                 SUM(IIF(mm.OPERACAO = 'E', mm.QTDE, mm.QTDE * -1)) AS QTDE_TOTAL_MOVIMENTADO, 
                 mm.PRECO, MM.LOTE, ROW_NUMBER() OVER (ORDER BY SUM(IIF(mm.OPERACAO = 'E', mm.QTDE, mm.QTDE * -1)) DESC) AS RANKING, SUM(MI.QTDE) ESTOQUE_REAL, COUNT(*) OVER () AS TOTAL_MATERIALS,
                 CASE WHEN ROW_NUMBER() OVER (ORDER BY SUM(IIF(mm.OPERACAO = 'E', mm.QTDE, mm.QTDE * -1)) DESC) <= (COUNT(*) OVER () * 0.1) THEN 'A'
@@ -137,11 +147,12 @@ class Almoxarifado extends DB {
                 FROM MAT_MOV_001 mm
                 INNER JOIN MATERIAL_001 m ON M.CODIGO = MM.CODIGO
                 INNER JOIN MAT_ITEN_001 mi ON MI.CODIGO = MM.CODIGO AND MI.COR = MM.COR AND MI.DEPOSITO = MM.DEPOSITO AND MI.LOTE = MM.LOTE 
-                WHERE {$condicaoDeposito} 
+                WHERE {$condicaoDeposito}
+                {$queryQualidade}
                 AND mm.DT_MOVTO BETWEEN '{$dataInicial}' AND '{$dataFinal}' 
                 AND MM.TP_MOV <> 'TRANSF. DEPOSITO'
                 {$condicaoGrupo}
-                GROUP BY mm.CODIGO, mm.COR, mm.DEPOSITO, mm.PRECO,MM.LOTE,M.DESCRICAO,M.LOCAL, M.SUB_GRUPO
+                GROUP BY mm.CODIGO, mm.COR, mm.DEPOSITO, mi.QUALIDADE,mm.PRECO,MM.LOTE,M.DESCRICAO,M.LOCAL, M.SUB_GRUPO
                 {$condicaoPosicaoEstoque}
                 ORDER BY QTDE_TOTAL_MOVIMENTADO DESC;
             ");
@@ -159,32 +170,57 @@ class Almoxarifado extends DB {
         }
     }
 
-    protected function updateAtualizaEstoque(int $qtde, string $codigo = '', string $cor = '', string $deposito = '', string $lote = '', string $user = '') {
-        if ($codigo == '' || $cor == '' || $deposito == '' || $lote == '' || $user = '') {
+    protected function updateAtualizaEstoque(float $qtde, string $codigo = '', string $cor = '', string $deposito = '', string $lote = '', int $qualidade = 0, string $operacao = '', float $qtdeMatMov = 0, string $user = '') {
+        if ($codigo == '' || $cor == '' || $deposito == '' || $lote == '' || $qualidade == 0 || $operacao == '0' || $operacao == '' || $qtdeMatMov == 0 || $user == '') {
             return [
-                'response' => "Não é possivel atualizar o Material: {$codigo} - Cor: {$cor} - Deposito: {$deposito} - Lote: {$lote} - Usuario: {$user}, pois algum campo está vazio, confira!",
+                'response' => "Não é possivel atualizar o Material: {$codigo} - Cor: {$cor} - Deposito: {$deposito} - Lote: {$lote} - Qualidade: {$qualidade} - Operação: {$operacao} - Movimentado: {$qtdeMatMov} - Usuario: {$user}, pois algum campo está vazio, confira!",
                 'status' => 404,
             ];
         }
+        
         try {
-            $materialEncontrado = parent::getConn()->prepare("SELECT CODIGO, COR, DEPOSITO, LOTE,QTDE FROM mat_iten_001 m WHERE CODIGO = :codigo AND COR = :cor AND DEPOSITO = :deposito AND LOTE = :lote");
+            $materialEncontrado = parent::getConn()->prepare("SELECT CODIGO, COR, DEPOSITO, LOTE,QTDE FROM mat_iten_001 m WHERE CODIGO = :codigo AND COR = :cor AND DEPOSITO = :deposito AND LOTE = :lote AND QUALIDADE = :qualidade");
 
             $materialEncontrado->bindParam(':codigo', $codigo);
             $materialEncontrado->bindParam(':cor', $cor);
             $materialEncontrado->bindParam(':deposito', $deposito);
             $materialEncontrado->bindParam(':lote', $lote);
+            $materialEncontrado->bindParam(':qualidade', $qualidade);
 
             $materialEncontrado->execute();
 
             $infoMaterialEncontrado = $materialEncontrado->fetchAll(PDO::FETCH_ASSOC);
             
             if (isset($infoMaterialEncontrado) && count($infoMaterialEncontrado) > 0) {
-                $info = parent::getConn()->prepare("UPDATE mat_iten_001 SET QTDE = {$qtde} WHERE CODIGO = :codigo AND COR = :cor AND DEPOSITO = :deposito AND LOTE = :lote");
+                $responseMovMat = $this->insertMovimentacaoMaterial(
+                    date("Y-m-d"),
+                    $codigo,
+                    $cor,
+                    $deposito,
+                    $operacao,
+                    "Feito: $user",
+                    'Mov. por Ger. de Inventario',
+                    $lote,
+                    'Mov. por Ger. de Inventario',
+                    $qualidade,
+                    $qtde,
+                    $user
+                );
+
+                if (!is_int($responseMovMat) && $responseMovMat <= 0) {
+                    return [
+                        'status' => 400,
+                        'message' => $responseMovMat,
+                    ];
+                }
+
+                $info = parent::getConn()->prepare("UPDATE mat_iten_001 SET QTDE = {$qtde} WHERE CODIGO = :codigo AND COR = :cor AND DEPOSITO = :deposito AND LOTE = :lote AND QUALIDADE = :qualidade");
 
                 $info->bindParam(':codigo', $codigo);
                 $info->bindParam(':cor', $cor);
                 $info->bindParam(':deposito', $deposito);
                 $info->bindParam(':lote', $lote);
+                $info->bindParam(':qualidade', $qualidade);
 
                 $info->execute();
 
@@ -213,5 +249,37 @@ class Almoxarifado extends DB {
                 "data" => "Error: " . $e->getMessage(),
             ];
         }
+    }
+
+    private function insertMovimentacaoMaterial($dt_movto, $codigo, $cor, $deposito, $operacao, $descricao, $tp_mov, $lote, $obs, $qualidade, $qtde, $user) {
+        try {
+            $stmt = parent::getConn()->prepare("
+                INSERT INTO MAT_MOV_001 (DT_MOVTO, CODIGO, COR, DEPOSITO, OPERACAO, DESCRICAO, TP_MOV, LOTE, OBS, QUALIDADE, QTDE) VALUES 
+                (:dt_movto, :codigo, :cor, :deposito, :operacao, :descricao, :tp_mov, :lote, :obs, :qualidade, :qtde);
+            ");
+            $descricao = "Feito: $user";
+    
+            $stmt->bindParam('dt_movto', $dt_movto);
+            $stmt->bindValue(':codigo', $codigo);
+            $stmt->bindValue(':cor', $cor);
+            $stmt->bindValue(':deposito', $deposito);
+            $stmt->bindValue(':operacao', $operacao);
+            $stmt->bindValue(':descricao', $descricao);
+            $stmt->bindValue(':tp_mov', 'Mov. por Ger. de Inventario');
+            $stmt->bindValue(':lote', $lote);
+            $stmt->bindValue(':obs', 'Mov. por Ger. de Inventario');
+            $stmt->bindValue(':qualidade', $qualidade);
+            $stmt->bindValue(':qtde', $qtde);
+        
+            $stmt->execute();
+    
+            $rowsExecuted = $stmt->rowCount();
+            
+            return $rowsExecuted;
+
+        } catch (PDOException $e) {
+            return $e->getMessage();
+        }
+
     }
 }

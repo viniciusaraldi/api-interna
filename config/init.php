@@ -42,6 +42,7 @@ abstract class DB {
             $this->tkBAbstract = $_ENV['TKB']; 
 
             $this->conn = new PDO("firebird:dbname={$this->dbName}/{$this->port}:{$this->path}", $this->user, $this->password);
+            $this->conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         } catch(PDOException $e) {
             throw new Exception("Não foi possivel conectar ao banco, entre em contato com o administrador do servidor!". $e->getMessage());
         }
