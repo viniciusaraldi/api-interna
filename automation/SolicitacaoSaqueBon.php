@@ -1,42 +1,151 @@
 <?php
 
 require_once __DIR__ . "/../config/init.php";
+require_once __DIR__ . "/../http/Response.php";
 
-$req = function () {
-    try {
-        $url = 'https://bonfitness.com.br/api/v1/auth/token';
-        $init = curl_init($url);
-        curl_setopt_array(
-            $init,
-            [
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_POST => true,
-                CURLOPT_SSL_VERIFYPEER => false,
-                CURLOPT_SSL_VERIFYHOST => false,
-                CURLOPT_HTTPHEADER => [
-                    "Content-Type" => "application/x-www-form-urlencoded",
-                ],
-                CURLOPT_POSTFIELDS => [
-                    'client_id' => 'Teste_48e494e4da0f8',
-                    'client_secret' => '85a2a4b84f373def914e694034eac463e7f68c40',
-                    'grant_type' => 'client_credentials',
-                ]
-            ],
-        );
-        $dados = json_decode(curl_exec($init), true);
-        curl_close($init);
-        return $dados['token_type'] . " " . $dados['access_token'] ;
-    } catch (Exception $e) {
-        return $e->getMessage();
+$req = require_once __DIR__ . "/../config/tks.php";
+
+class SolicitacaoSaqueBon extends DB {
+    public function __construct() {
+        parent::__construct();
     }
-};
 
-function getSaque($tokens) {
-    try {
-        //data_pedido_maior_igual=2024-02-01&data_pedido_menor_igual=2024-02-28
-        $dataCurrent = date("Y-m-d");
-        // $url = 'https://bonfitness.com.br/api/v1/solicitacoes-saque?status_id=1&data_pedido='.$dataCurrent;
-        $url = 'https://bonfitness.com.br/api/v1/solicitacoes-saque?status_id=1&data_pedido_maior_igual=2024-02-01&data_pedido_menor_igual=2024-02-28';
+    private static function logError($message, $dados = null) {
+        $errorFile = __DIR__ . '/../errors/automation/SolicitacaoSaqueBon/error-' . date('Y-m-d') . '.log';
+        $file = fopen($errorFile, 'a+');
+        fwrite($file, "Erro: $message\n");
+        if ($dados) {
+            fwrite($file, "Dados: " . json_encode($dados, JSON_UNESCAPED_UNICODE) . "\n");
+        }
+        fclose($file);
+    }
+
+    public function setSaque($dados) {
+        try {
+            if ($dados['status'] != 200 || !isset($dados['message'])) {
+                SolicitacaoSaqueBon::logError("Erro na API ou dados ausentes", $dados);
+                return 'Erro na Api ou dados ausentes';
+            } 
+            
+            $db = parent::getConn();
+            $solicitacoes = $dados['message'];
+            
+            foreach ($solicitacoes as $value) {
+                if ($value['status_id'] != '1') {
+                    SolicitacaoSaqueBon::logError('status diferente de pendente!', $value);
+                } 
+
+                $user = $value['distribuidor_id'];
+                $operacao = $value['operacao'];
+                $id_sol = $value['id'];
+                $solicitado = $value['valor_solicitado'];                
+                $taxa = $value['total_taxas'];
+                $valor = $value['valor_a_depositar'];                
+                $banco = $value['banco'];
+                $tipo_conta = $value['tipo_conta'];                
+                $agencia = $value['conta_bancaria']['tipo_chave_pix'] !== null 
+                    ? $value['conta_bancaria']['tipo_chave_pix']
+                    : trim($value['agencia']);
+
+                $numero_conta = $value['conta_bancaria']['tipo_chave_pix'] !== null
+                    ? $value['conta_bancaria']['chave_pix'] 
+                    : $value['numero'];
+
+                $data_sol = $value['data_pedido'];
+                $data_ven = date('Y-m-20', strtotime($data_sol));
+
+                $nome = $value['conta_bancaria']['nome'];
+                $cpf_cnpj = $value['conta_bancaria']['cnpj'] == null ? $value['conta_bancaria']['cpf'] : $value['conta_bancaria']['cnpj'];
+                
+                $setDB = $db->prepare("INSERT INTO TABF06 (
+                    ID_USER,
+                    OPERACAO,
+                    ID_SOL,
+                    SOLICITADO,
+                    TAXA,
+                    VALOR,
+                    BANCO,
+                    TIPO_CONTA,
+                    AGENCIA,
+                    NUMERO_CONTA,
+                    DATA_SOL,
+                    DATA_VEN,
+                    NOME,
+                    CPF_CNPJ
+                ) VALUES (
+                    '$user',
+                    '$operacao',
+                    $id_sol,
+                    $solicitado,
+                    $taxa,
+                    $valor,
+                    '$banco',
+                    '$tipo_conta',
+                    '$agencia',
+                    '$numero_conta',
+                    '$data_sol',
+                    '$data_ven',
+                    '$nome',
+                    '$cpf_cnpj'
+                )");
+                    
+                $setDB->execute();
+                
+            }
+        } catch (Exception $e) {
+            return [
+                'status' => 500,
+                'message' => $e->getMessage(),
+            ];
+        }
+    }
+
+    public static function getSaque($tokens) {
+        try {
+            //data_pedido_maior_igual=2024-02-01&data_pedido_menor_igual=2024-02-28
+            $dateFirst = date("Y-m-01");
+            $dateLast = date("Y-m-t");
+            // $url = 'https://bonfitness.com.br/api/v1/solicitacoes-saque?status_id=1&data_pedido='.$dataCurrent;
+            $url = "https://bonfitness.com.br/api/v1/solicitacoes-saque?data_pedido__maior_igual={$dateFirst}&data_pedido__menor_igual={$dateLast}";
+            $init = curl_init();
+            curl_setopt_array(
+                $init,
+                [
+                    CURLOPT_URL => $url,
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_SSL_VERIFYPEER => false,
+                    CURLOPT_SSL_VERIFYHOST => false,
+                    CURLOPT_CUSTOMREQUEST => 'GET',
+                    CURLOPT_HTTPHEADER => [
+                        "Content-type: application/json",
+                        "Authorization: $tokens",
+                    ],
+                    CURLOPT_ENCODING => 'UTF-8',
+                ],
+            );
+
+            $dados = json_decode(curl_exec($init), true);
+            curl_close($init);
+
+            for ($i=0; $i < count($dados['solicitacoes_saque_transacoes']); $i++) { 
+                $solicitacoes = $dados['solicitacoes_saque_transacoes'][$i];
+                $dados['solicitacoes_saque_transacoes'][$i]['conta_bancaria'] = SolicitacaoSaqueBon::getContaBancariasDistribuidor($solicitacoes['distribuidor_id'], $tokens);
+            }
+
+            return [
+                'status' => 200,
+                'message' => $dados['solicitacoes_saque_transacoes'],
+            ];
+        } catch (Exception $e) {
+            return [
+                'status' => 500,
+                'message' => $e->getMessage(),
+            ];
+        }
+    }
+
+    private static function getContaBancariasDistribuidor ($id, $tokens) {
+        $url = 'https://bonfitness.com.br/api/v1/distribuidor-conta-bancaria?distribuidor=' . $id;
         $init = curl_init();
         curl_setopt_array(
             $init,
@@ -50,109 +159,29 @@ function getSaque($tokens) {
                     "Content-type: application/json",
                     "Authorization: $tokens",
                 ],
+                CURLOPT_ENCODING => 'UTF-8',
             ],
         );
-        if (curl_exec($init) == false) {
-            return [
-                'status' => 401,
-                'message' => 'Erro' . curl_error($init),
-            ];
-        }
+
         $dados = json_decode(curl_exec($init), true);
-        curl_close($init);
-        return [
-            'status' => 200,
-            'message' => $dados,
-        ];
-    } catch (Exception $e) {
-        return [
-            'status' => 500,
-            'message' => $e->getMessage(),
-        ];
-    }
-}
+        $idContaBancaria = 0;
+        $keyArray = 0;
 
-function logError($message, $dados = null) {
-    $errorFile = __DIR__ . '/../errors/automation/SolicitacaoSaqueBon/error-' . date('Y-m-d') . '.log';
-    $file = fopen($errorFile, 'a+');
-    fwrite($file, "Erro: $message\n");
-    if ($dados) {
-        fwrite($file, "Dados: " . json_encode($dados, JSON_UNESCAPED_UNICODE) . "\n");
-    }
-    fclose($file);
-}
-
-class SolicitacaoSaqueBon extends DB {
-    public function __construct() {
-        parent::__construct();
-    }
-
-    public function setSaque($dados) {
-        try {
-            if ($dados['status'] == 500 || $dados['status'] == 401 || !isset($dados['message']['solicitacoes_saque_transacoes'])) {
-                logError("Erro na API ou dados ausentes", $dados);
-            } else {
-                $db = parent::getConn();
-                $solicitacoes = $dados['message']['solicitacoes_saque_transacoes'];
-                foreach ($solicitacoes as $value) {
-                    $user = $value['distribuidor_id'];
-                    $operacao = $value['operacao'];
-                    $id_sol = $value['id'];
-                    $solicitado = $value['valor_solicitado'];                
-                    $taxa = $value['total_taxas'];
-                    $valor = $value['valor_a_depositar'];                
-                    $banco = $value['banco'];
-                    $tipo_conta = $value['tipo_conta'];                
-                    $agencia = $value['agencia'];
-                    $numero_conta = $value['numero'];
-                    $data_sol = $value['data_pedido'];
-                    $data_ven = date('Y-m-20', strtotime($data_sol));
-    
-                    $setDB = $db->prepare("INSERT INTO TABF06 (
-                      ID_USER,
-                      OPERACAO,
-                      ID_SOL,
-                      SOLICITADO,
-                      TAXA,
-                      VALOR,
-                      BANCO,
-                      TIPO_CONTA,
-                      AGENCIA,
-                      NUMERO_CONTA,
-                      DATA_SOL,
-                      DATA_VEN
-                    ) VALUES (
-                        '$user',
-                        '$operacao',
-                        $id_sol,
-                        $solicitado,
-                        $taxa,
-                        $valor,
-                        '$banco',
-                        '$tipo_conta',
-                        '$agencia',
-                        '$numero_conta',
-                        '$data_sol',
-                        '$data_ven'
-                    )");
-    
-                    $setDB->execute();
-    
-                    if (!$setDB) {
-                        logError("Erro ao inserir dados no banco", $value);
-                    }
+        if (count($dados['distribuidor_conta_bancaria']) > 1) {
+            for ($i=0; $i < count($dados['distribuidor_conta_bancaria']); $i++) { 
+                if ($dados['distribuidor_conta_bancaria'][$i]['id'] > $idContaBancaria) {
+                    $idContaBancaria = strval($dados['distribuidor_conta_bancaria'][$i]['id']);
+                    $keyArray = $i;
                 }
             }
-        } catch (Exception $e) {
-            return [
-                'status' => 500,
-                'message' => $e->getMessage(),
-            ];
         }
+
+        return $dados['distribuidor_conta_bancaria'][$keyArray];
     }
 
 
 }
 
 $db = new SolicitacaoSaqueBon();
-$db->setSaque(getSaque($req()));
+$dados = $db::getSaque($req());
+$saques = $db->setSaque($dados);
