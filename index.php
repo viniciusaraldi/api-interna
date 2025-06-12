@@ -4,7 +4,6 @@ header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Credentials: true");
 header("Access-Control-Allow-Methods: GET, POST, OPTIONS, DELETE, PUT");
 header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header('Content-Type: application/json');
 error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
 
 // Tratar requisições OPTIONS
@@ -22,16 +21,31 @@ $body = json_decode(file_get_contents('php://input'), true) ?? $_POST;
 $files = $_FILES;
 
 $arraySetor = explode("/", $uri);
-$setor = $arraySetor[3];
+$setor = $arraySetor[2];
 
 $foundApi = array_filter( explode("/", $uri));
 
 if (in_array("api",$foundApi)) {
     array_shift($foundApi);
-    array_shift($foundApi);
     if (array_key_exists($foundApi[0], $routes)) {
-        array_shift($foundApi);     
-        echo json_encode($routes[$setor](strtolower($method), $foundApi[0], $params, $body, $files));
+        array_shift($foundApi);    
+        $data = $routes[$setor](strtolower($method), $foundApi[0], $params, $body, $files);
+        header('Content-Type: application/json');
+
+        $json = json_encode($data);
+
+        if ($json === false) {
+            http_response_code(500);
+            echo json_encode([
+                'error' => 'Erro ao converter para JSON',
+                'json_error' => json_last_error_msg(),
+                'data_preview' => mb_convert_encoding(print_r($data, true), 'UTF-8')
+            ]);
+            exit;
+        }
+
+        echo $json;
+
     }
 } else {
     return [

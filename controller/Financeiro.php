@@ -202,7 +202,7 @@ class Financeiro extends DB {
             $dateTime = $dT->format("Y-m-d H:i:s.v");
             $obs = 'Baixou com Cartao Dup:' . $numero;
 
-            $sql = "INSERT INTO RECEBERB_003 (classe, COMISSAO, CONTROLE, DESAGIO, desconto, DESCONTO2, DESCONTO3, DESP_COBRANCA, DOCTO, DT_COMISSAO, DT_CONT, dt_pagto, HISTORICO, juros, LANCAMENTO, MOEDA, MOTIVO_DEV, NRCAIXA, NUMERO, obs, PORTADOR, QT_DEV, TAXA_MOEDA, TELA_BAIXA, VAL_DEV, VALOR_PAGO, VALOR2, VALPAGO_MOEDA, VAR_CAMBIAL, DATA_HORA) VALUES ('1001', 'S', '', 0, 0, 0, 0, 0, '', '$dataCorrente', '$dataCorrente', '$dataCorrente', '0001', 0, $lancamento, '15', '', '', '$duplicata', '$obs', '', 0, 0, 'AutomacaoBaixaCartaoBelluno', 0, $valorParcela, $valorTotal, 0, 0, '$dateTime');";
+            $sql = "INSERT INTO RECEBERB_001 (classe, COMISSAO, CONTROLE, DESAGIO, desconto, DESCONTO2, DESCONTO3, DESP_COBRANCA, DOCTO, DT_COMISSAO, DT_CONT, dt_pagto, HISTORICO, juros, LANCAMENTO, MOEDA, MOTIVO_DEV, NRCAIXA, NUMERO, obs, PORTADOR, QT_DEV, TAXA_MOEDA, TELA_BAIXA, VAL_DEV, VALOR_PAGO, VALOR2, VALPAGO_MOEDA, VAR_CAMBIAL, DATA_HORA) VALUES ('1001', 'S', '', 0, 0, 0, 0, 0, '', '$dataCorrente', '$dataCorrente', '$dataCorrente', '0001', 0, $lancamento, '15', '', '', '$duplicata', '$obs', '', 0, 0, 'AutomacaoBaixaCartaoBelluno', 0, $valorParcela, $valorTotal, 0, 0, '$dateTime');";
 
             $stmt = $this->conn->prepare($sql);
             $stmt->execute();
@@ -226,7 +226,7 @@ class Financeiro extends DB {
         try {
             $valorPagoReceberCliente = $this->getValorPagoDuplCliente($duplicata);
             $valorPago = $valorPagoReceberCliente + $valorParcela;
-            $sql = "UPDATE RECEBER_003 SET VALOR_PAGO = $valorPago WHERE NUMERO = '$duplicata';";
+            $sql = "UPDATE RECEBER_001 SET VALOR_PAGO = $valorPago WHERE NUMERO = '$duplicata' and emp_id = 3;";
 
             $stmt = $this->conn->prepare($sql);
             $stmt->execute();
@@ -273,7 +273,7 @@ class Financeiro extends DB {
 
     // Pega o valor pago na duplicata do cliente
     private function getValorPagoDuplCliente($numero) {
-        $sql = "SELECT r.VALOR_PAGO FROM RECEBER_003 r WHERE NUMERO = '$numero'";
+        $sql = "SELECT r.VALOR_PAGO FROM RECEBER_001 r WHERE NUMERO = '$numero' AND EMP_ID = 3";
         $stmt = $this->conn->prepare($sql);
         $stmt->execute();
         $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -354,16 +354,18 @@ class Financeiro extends DB {
     
     // Busca todos os pedidos que tiveram faturamento e duplicata, a pesquisa é feita em cima da data de emissão da duplciata
     protected function getPedidosSisplan($dataInicial, $dataFinal) {
-        $sql = "SELECT RECEBER.CODCLI CLIENTE, PEDIDO.NUMERO SISPLAN, PEDIDO.ART_CLI PORTMONTT, PEDIDO.PED_CLI UOOU, RECEBER.NUMERO DUPLICATA, NOTA.FATURA, RECEBER.VALOR FROM NOTA_003 NOTA
-        INNER JOIN PEDIDO_001 PEDIDO ON NOTA.FATURA = PEDIDO.NOTA
-        INNER JOIN RECEBER_003 RECEBER ON RECEBER.FATURA = NOTA.FATURA 
-        WHERE 1 = 1
-        AND PEDIDO.EMP_FAT = '003'
-        AND RECEBER.DT_EMISSAO between '$dataInicial' and '$dataFinal'
-        AND RECEBER.NUMERO NOT IN (SELECT DISTINCT BAIXA.NUMERO FROM RECEBERB_003 BAIXA WHERE BAIXA.TELA_BAIXA IN ('AutomacaoBaixaCartaoBelluno','TfmBaixaReceberLote'))
-        AND RECEBER.NUMERO NOT LIKE '%C/%'
-        AND (RECEBER.VALOR - RECEBER.VALOR_PAGO) <> 0
-        GROUP BY RECEBER.CODCLI, PEDIDO.NUMERO, PEDIDO.ART_CLI, PEDIDO.PED_CLI, RECEBER.NUMERO, NOTA.FATURA, RECEBER.VALOR
+        $sql = "SELECT RECEBER.CODCLI CLIENTE, PEDIDO.NUMERO SISPLAN, PEDIDO.ART_CLI PORTMONTT, PEDIDO.PED_CLI UOOU, RECEBER.NUMERO DUPLICATA, NOTA.FATURA, RECEBER.VALOR FROM NOTA_001 NOTA
+            INNER JOIN PEDIDO_001 PEDIDO ON NOTA.FATURA = PEDIDO.NOTA
+            INNER JOIN RECEBER_001 RECEBER ON RECEBER.FATURA = NOTA.FATURA and RECEBER.EMP_ID = 3
+            WHERE 1 = 1
+            and NOTA.EMP_ID = 3
+            AND PEDIDO.EMP_FAT = '003'
+            AND RECEBER.DT_EMISSAO between '$dataInicial' and '$dataFinal'
+            AND RECEBER.NUMERO NOT IN (SELECT DISTINCT BAIXA.NUMERO FROM RECEBERB_001 BAIXA WHERE BAIXA.TELA_BAIXA IN ('AutomacaoBaixaCartaoBelluno','TfmBaixaReceberLote'))
+            AND PEDIDO.NUMERO = '62867'
+            AND RECEBER.NUMERO NOT LIKE '%C/%'
+            AND (RECEBER.VALOR - RECEBER.VALOR_PAGO) <> 0
+            GROUP BY RECEBER.CODCLI, PEDIDO.NUMERO, PEDIDO.ART_CLI, PEDIDO.PED_CLI, RECEBER.NUMERO, NOTA.FATURA, RECEBER.VALOR
         ";
         $stmt = $this->conn->prepare($sql);
         $stmt->execute();

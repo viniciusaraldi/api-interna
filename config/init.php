@@ -8,6 +8,7 @@ abstract class DB {
     private $user;
     private $password;
     private $port;
+    private $schema;
     protected $tkBAbstract;
     private static $file = __DIR__ . "/../.env";
     protected $conn;
@@ -36,13 +37,15 @@ abstract class DB {
             $this->dbName = $_ENV['SISPLANHOST'];
             $this->port = $_ENV['SISPLANPORT'];
             $this->path = $_ENV['SISPLANPATH'];
+            $this->schema = $_ENV['SISPLANSCHEMA'];
 
             $this->pathEstilo = $_ENV['PATHESTILO'];
     
             $this->tkBAbstract = $_ENV['TKB']; 
 
-            $this->conn = new PDO("firebird:dbname={$this->dbName}/{$this->port}:{$this->path}", $this->user, $this->password);
+            $this->conn = new PDO("pgsql:host={$this->dbName};port={$this->port};dbname={$this->path};user={$this->user};password={$this->password}");
             $this->conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            $this->conn->exec("SET search_path TO {$this->schema};");
         } catch(PDOException $e) {
             throw new Exception("Não foi possivel conectar ao banco, entre em contato com o administrador do servidor!". $e->getMessage());
         }
