@@ -355,9 +355,9 @@ class Financeiro2 extends DB
             AND PEDIDO.EMP_FAT = '003'
             AND RECEBER.DT_EMISSAO = cast('$data' as date)
             AND RECEBER.NUMERO NOT IN (SELECT DISTINCT BAIXA.NUMERO FROM RECEBERB_001 BAIXA WHERE BAIXA.TELA_BAIXA IN ('AutomacaoBaixaCartaoBelluno','TfmBaixaReceberLote'))
-            AND PEDIDO.NUMERO in ('62879', '62900','62920')
+            --AND PEDIDO.NUMERO in ('62879', '62900','62920')
             and pedido.id_tipo in (500000022, 500000021, 500000020)
-            AND RECEBER.NUMERO NOT LIKE '%C/%'
+            AND RECEBER.NUMERO NOT LIKE '%C-3%'
             AND (RECEBER.VALOR - RECEBER.VALOR_PAGO) <> 0
             GROUP BY RECEBER.CODCLI, PEDIDO.NUMERO, PEDIDO.ART_CLI, PEDIDO.PED_CLI, RECEBER.NUMERO, NOTA.FATURA, RECEBER.VALOR
         ";

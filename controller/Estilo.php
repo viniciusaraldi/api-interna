@@ -34,7 +34,7 @@ class Estilo extends DB {
         $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
         return $allData == 0 ? (
-            $column == '' ? $result[0] : $result[0][strtoupper($column)]
+            $column == '' ? $result[0] : $result[0][strtolower($column)]
             ) : ['colunas' => $result, 'linhas' => $stmt->rowCount()];
     }
 
@@ -251,7 +251,7 @@ class Estilo extends DB {
      * @return array
      */
     private function getPrototipoPorAmostra () {
-        return $this->getSql("SELECT  DISTINCT PROTOTIPO, list(amostra) AS amostra FROM (SELECT distinct prototipo, amostra FROM $this->tableDb order by prototipo, amostra) GROUP BY prototipo", '', 1);
+        return $this->getSql("SELECT  DISTINCT PROTOTIPO, string_agg(amostra::text, ',') AS amostra FROM (SELECT distinct prototipo, amostra FROM $this->tableDb order by prototipo, amostra) GROUP BY prototipo", '', 1);
     }
 
     /**
